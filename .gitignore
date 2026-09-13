@@ -1,0 +1,34 @@
+# C++ build files
+build/
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.out
+*.dll
+*.so
+*.dylib
+
+# Python temporary files and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# VS Code and other editor settings
+.vscode/
+.idea/
+
+# macOS files
+.DS_Store
+
+# Generated logs and result files
+data/*.csv
+data/*.json
+docs/results/*.png
+docs/results/*.pdf
+
+# Private keys or secrets
+*.key
+*.pem
