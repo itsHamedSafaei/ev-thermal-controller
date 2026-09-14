@@ -19,3 +19,36 @@ double calculate_cooling_command(
         100.0
     );
 }
+
+VehicleMode determine_vehicle_mode(
+    double battery_temperature_c
+) {
+    if (battery_temperature_c >= 60.0) {
+        return VehicleMode::Fault;
+    }
+
+    if (battery_temperature_c >= 50.0) {
+        return VehicleMode::DerateCharging;
+    }
+
+    if (battery_temperature_c > 30.0) {
+        return VehicleMode::Cooling;
+    }
+
+    return VehicleMode::Normal;
+}
+
+const char* to_string(VehicleMode mode) {
+    switch (mode) {
+        case VehicleMode::Normal:
+            return "NORMAL";
+        case VehicleMode::Cooling:
+            return "COOLING";
+        case VehicleMode::DerateCharging:
+            return "DERATE_CHARGING";
+        case VehicleMode::Fault:
+            return "FAULT";
+    }
+
+    return "UNKNOWN";
+}
