@@ -20,9 +20,39 @@ double calculate_cooling_command(
     );
 }
 
-VehicleMode determine_vehicle_mode(
-    double battery_temperature_c
+bool is_temperature_reading_valid(
+    const SensorData& data
 ) {
+    if (!data.temperature_sensor_valid) {
+        return false;
+    }
+
+    if (!data.can_message_received) {
+        return false;
+    }
+
+    if (data.message_age_ms > 500) {
+        return false;
+    }
+
+    if (data.battery_temperature_c < -40.0 ||
+        data.battery_temperature_c > 120.0) {
+        return false;
+    }
+
+    return true;
+}
+
+VehicleMode determine_vehicle_mode(
+    const SensorData& data
+) {
+    if (!is_temperature_reading_valid(data)) {
+        return VehicleMode::Fault;
+    }
+
+    const double battery_temperature_c =
+        data.battery_temperature_c;
+
     if (battery_temperature_c >= 60.0) {
         return VehicleMode::Fault;
     }
