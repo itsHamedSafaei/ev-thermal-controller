@@ -32,5 +32,6 @@ docs/results/*.pdf
 # Private keys or secrets
 *.key
 *.pem
-# Local C++ test executable
+# Local C++ executables
 /cpp/test_therm_controller
+/cpp/thermal_controller
