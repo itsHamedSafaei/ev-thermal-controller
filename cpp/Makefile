@@ -22,7 +22,10 @@ test: $(TEST_TARGET)
 demo: $(DEMO_TARGET)
 	./$(DEMO_TARGET)
 
+validate:
+	python3 ../python/scripts/validate_scenarios.py
+
 clean:
 	rm -f $(TEST_TARGET) $(DEMO_TARGET) src/*.o tests/*.o
 
-.PHONY: all test demo clean
+.PHONY: all test demo validate clean
