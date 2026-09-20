@@ -148,7 +148,7 @@ int main() {
         }
     }
 
-    {
+        {
         SensorData data = make_valid_data();
         data.battery_temperature_c = 200.0;
 
@@ -164,6 +164,32 @@ int main() {
         ++total;
         if (run_test(
                 "Out-of-range temperature enters safe fault state",
+                data,
+                expected
+            )) {
+            ++passed;
+        }
+    }
+
+    {
+        // Verify the lower boundary of the valid simulated temperature range.
+        //
+        // Temperatures below -40.0C must be treated as invalid input data.
+        SensorData data = make_valid_data();
+        data.battery_temperature_c = -41.0;
+
+        const ControllerOutput expected{
+            VehicleMode::Fault,
+            100.0,
+            false,
+            false,
+            true,
+            FaultCode::TemperatureOutOfRange
+        };
+
+        ++total;
+        if (run_test(
+                "-41.0C lower-range temperature fault",
                 data,
                 expected
             )) {

@@ -25,7 +25,7 @@ The traceability matrix helps confirm that requirements are not only documented,
 | FR-05 | Enter `DERATE_CHARGING` mode from 50°C to below 60°C | `update_controller()` returns `VehicleMode::DerateCharging`, 100% cooling, and `charging_derated = true` | Unit tests verify 50.0°C and 59.9°C derate behavior; scenario runner demonstrates 55.0°C | `Implemented` |
 | FR-06 | Enter a fault at or above 60°C | `update_controller()` returns a safe `FAULT` output with `CriticalOvertemperature` | Unit test verifies 60.0°C; scenario runner and Python validator verify the critical-overtemperature case | `Implemented` |
 | FR-07 | Enter a fault when the temperature sensor is invalid | `update_controller()` returns a safe `FAULT` output with `InvalidTemperatureSensor` | C++ unit test, scenario runner, and Python validator verify the invalid-sensor case | `Implemented` |
-| FR-08 | Treat temperatures below -40°C or above 120°C as invalid | `update_controller()` checks the simulated valid range from -40°C to 120°C | Unit test verifies an above-range value of 200.0°C | `Partially Implemented` |
+| FR-08 | Treat temperatures below -40°C or above 120°C as invalid | `update_controller()` checks the simulated valid range from -40°C to 120°C | Unit tests verify a below-range value of -41.0°C and an above-range value of 200.0°C | `Implemented` |
 | FR-09 | Enter a fault when a required simulated CAN-style message is missing | `update_controller()` checks `can_message_received` | C++ unit test verifies a missing CAN-style message produces `FAULT` | `Implemented` |
 | FR-10 | Enter a fault when a required simulated message is older than 500 ms | `update_controller()` checks `message_age_ms > 500` | C++ unit test and Python scenario validation verify a 501 ms CAN timeout | `Implemented` |
 | FR-11 | Prioritize safety-related faults over normal operating behavior | `update_controller()` validates data before normal mode and temperature decisions | C++ unit test verifies invalid sensor data takes priority over a 65.0°C value | `Implemented` |
@@ -117,7 +117,6 @@ The following improvements are planned to close the remaining partial or planned
 
 | Item | Reason |
 |---|---|
-| Add a below-range temperature test, such as -41.0°C | Completes test coverage for both sides of the valid temperature range |
 | Add a 100 ms periodic simulation sequence | Addresses NFR-01 periodic-execution requirement |
 | Expand logging evidence or document the scenario-level logging boundary | Clarifies the scope of FR-12 logging behavior |
 | Update README.md | Makes the GitHub landing page accurately reflect completed features and commands |
