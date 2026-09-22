@@ -28,17 +28,17 @@ The traceability matrix helps confirm that requirements are not only documented,
 | FR-08 | Treat temperatures below -40°C or above 120°C as invalid | `update_controller()` checks the simulated valid range from -40°C to 120°C | Unit tests verify a below-range value of -41.0°C and an above-range value of 200.0°C | `Implemented` |
 | FR-09 | Enter a fault when a required simulated CAN-style message is missing | `update_controller()` checks `can_message_received` | C++ unit test verifies a missing CAN-style message produces `FAULT` | `Implemented` |
 | FR-10 | Enter a fault when a required simulated message is older than 500 ms | `update_controller()` checks `message_age_ms > 500` | C++ unit test and Python scenario validation verify a 501 ms CAN timeout | `Implemented` |
-| FR-11 | Prioritize safety-related faults over normal operating behavior | `update_controller()` validates data before normal mode and temperature decisions | C++ unit test verifies invalid sensor data takes priority over a 65.0°C value | `Implemented` |
-| FR-12 | Log controller inputs and outputs for every simulated scenario update | `cpp/src/main.cpp` writes scenario inputs and controller outputs to `data/scenario_results.csv` | `make demo` creates CSV results; Python validator reads and validates the generated CSV file | `Partially Implemented` |
+| FR-11 | Prioritize safety-related faults over normal operating behavior | `update_controller()` validates data before normal-mode and temperature decisions | C++ unit test verifies invalid sensor data takes priority over a 65.0°C value | `Implemented` |
+| FR-12 | Log controller inputs and outputs for every simulated controller update | `cpp/src/main.cpp` writes named scenario results to `data/scenario_results.csv` and periodic results to `data/periodic_results.csv` | `make demo` creates both CSV files; Python validation reads and checks both generated result files | `Implemented` |
 
 ## 4. Non-Functional Requirements
 
 | ID | Requirement summary | Implementation evidence | Test or demonstration evidence | Status |
 |---|---|---|---|---|
-| NFR-01 | Run as a simulated periodic task with an initial update interval of 100 ms | Current scenario runner executes predefined scenarios one time each | No periodic 100 ms simulation sequence exists yet | `Planned` |
+| NFR-01 | Run as a simulated periodic task with an initial update interval of 100 ms | `cpp/src/main.cpp` defines and processes periodic controller inputs at simulated times 0 ms through 600 ms, in 100 ms increments | `data/periodic_results.csv` records seven periodic updates; Python validation confirms the expected outputs and 100 ms spacing | `Implemented` |
 | NFR-02 | Use modular, descriptive C++ code | Controller interface, controller implementation, scenario runner, and unit tests are separated into focused files | Code is built using strict warnings: `-Wall -Wextra -pedantic` | `Implemented` |
-| NFR-03 | Support automated testing of normal, boundary, and fault conditions | Controller returns `ControllerOutput`, allowing tests to inspect all outputs | 13 C++ unit tests and 7 Python CSV scenario validations currently pass | `Implemented` |
-| NFR-04 | Include requirements, design assumptions, safety scope, testing, and run instructions | Requirements, safety notes, and architecture documents are present | Documentation is being expanded; README update and test-results documentation are still planned | `Partially Implemented` |
+| NFR-03 | Support automated testing of normal, boundary, and fault conditions | Controller returns `ControllerOutput`, allowing tests to inspect all outputs | 14 C++ unit tests, 7 Python scenario validations, and 7 Python periodic-step validations pass | `Implemented` |
+| NFR-04 | Include requirements, design assumptions, safety scope, testing, and run instructions | Requirements, safety notes, architecture documents, and this traceability matrix are present | Documentation is being expanded; README updates and a dedicated test-results document are still planned | `Partially Implemented` |
 | NFR-05 | Remain simulation only and do not communicate with a real vehicle network | All project inputs are simulated in source code; no hardware or CAN-library integration is used | Safety notes and source-code scope statements describe the simulation-only boundary | `Implemented` |
 
 ## 5. Current Test Evidence
@@ -57,7 +57,7 @@ make test
 Current expected result:
 
 ```text
-Summary: 13/13 tests passed.
+Summary: 14/14 tests passed.
 ```
 
 The current C++ test suite covers:
@@ -65,7 +65,7 @@ The current C++ test suite covers:
 - Invalid temperature sensor
 - Missing CAN-style message
 - CAN-style message timeout
-- Above-range temperature
+- Below-range and above-range temperatures
 - Normal operation
 - Temperature boundaries
 - Cooling calculation
@@ -73,7 +73,7 @@ The current C++ test suite covers:
 - Critical overtemperature
 - Fault-priority behavior
 
-### 5.2 Scenario Runner
+### 5.2 Scenario Runner and Periodic Simulation
 
 The C++ scenario runner provides readable terminal output and generated CSV logging.
 
@@ -84,7 +84,7 @@ cd cpp
 make demo
 ```
 
-The scenario runner currently demonstrates:
+The scenario runner demonstrates:
 
 - Normal operation
 - Cooling required
@@ -94,9 +94,30 @@ The scenario runner currently demonstrates:
 - Out-of-range temperature
 - Critical overtemperature
 
+The same program also runs a simulated periodic controller sequence with a 100 ms update interval.
+
+The periodic sequence demonstrates:
+
+- 0 ms: 25.0°C, `NORMAL`
+- 100 ms: 32.0°C, `COOLING`
+- 200 ms: 42.0°C, `COOLING`
+- 300 ms: 55.0°C, `DERATE_CHARGING`
+- 400 ms: 60.0°C, `FAULT`
+- 500 ms: 42.0°C, `COOLING`
+- 600 ms: 25.0°C, `NORMAL`
+
+The scenario runner writes generated output to:
+
+```text
+data/scenario_results.csv
+data/periodic_results.csv
+```
+
+These generated CSV files are ignored by Git and are recreated by `make demo` or `make validate`.
+
 ### 5.3 Python Validation
 
-The Python validator independently checks the scenario CSV results.
+The Python validator independently checks both generated CSV files.
 
 Run:
 
@@ -108,21 +129,32 @@ make validate
 Current expected result:
 
 ```text
-Summary: 7/7 scenarios passed.
+Scenario summary: 7/7 scenarios passed.
+Periodic summary: 7/7 periodic steps passed.
+[PASS] All periodic controller updates are spaced by 100 ms
+[PASS] Complete validation passed.
 ```
+
+The Python automation:
+
+- Runs the C++ demo to create fresh result files
+- Validates every named scenario against independent expected outputs
+- Confirms exactly seven periodic result rows are present
+- Confirms expected controller output at every periodic timestamp
+- Confirms each periodic sample is spaced exactly 100 ms from the previous sample
+- Returns a non-zero exit status when validation fails
 
 ## 6. Remaining Planned Work
 
-The following improvements are planned to close the remaining partial or planned requirements:
+The following improvements remain planned:
 
 | Item | Reason |
 |---|---|
-| Add a 100 ms periodic simulation sequence | Addresses NFR-01 periodic-execution requirement |
-| Expand logging evidence or document the scenario-level logging boundary | Clarifies the scope of FR-12 logging behavior |
-| Update README.md | Makes the GitHub landing page accurately reflect completed features and commands |
-| Add a test-results document or screenshots | Makes validation evidence easier for GitHub reviewers to inspect |
+| Update `README.md` | Makes the GitHub landing page accurately reflect completed features, commands, and validation evidence |
+| Add a dedicated test-results document or screenshots | Makes validation evidence easier for GitHub reviewers to inspect |
 | Add CMake build support | Provides a more standard C++ build configuration in addition to the Makefile |
 | Add optional dashboard visualization | Provides a polished portfolio interface after the technical core is complete |
+| Consider an optional stateful fault-recovery model | A future enhancement could add fault latching, recovery conditions, and hysteresis; the current controller intentionally remains stateless for educational clarity |
 
 ## 7. Scope Reminder
 
@@ -130,4 +162,4 @@ This matrix describes an educational simulation only.
 
 The project does not claim production-vehicle capability, real CAN communication, ISO 26262 compliance, AUTOSAR compliance, real-time operating-system behavior, hardware-in-the-loop testing, or approval by Rivian, Volkswagen Group, or any other organization.
 
-All thresholds, inputs, outputs, controller decisions, and test cases are simplified examples for learning and portfolio development.
+All thresholds, inputs, outputs, controller decisions, periodic timings, and test cases are simplified examples for learning and portfolio development.

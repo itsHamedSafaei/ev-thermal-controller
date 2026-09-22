@@ -1,16 +1,21 @@
 // This file runs simulated EV battery thermal-control scenarios.
 //
-// It prints readable output for a person in the terminal and writes the
-// same results to a CSV file for future Python-based test automation.
+// It prints readable results to the terminal and writes CSV output for
+// Python-based validation.
+//
+// This file includes:
+// - Individual controller scenarios
+// - A simulated periodic controller sequence at 100 ms intervals
+// - CSV logging for both result types
 //
 // This is an educational simulation only. It does not communicate with a
 // real vehicle, battery, charger, ECU, or CAN network.
 
 #include "thermal_controller.hpp"
 
-// <array> stores a fixed list of scenarios.
+// <array> stores fixed collections of scenarios and periodic inputs.
 // <filesystem> creates the output data directory when needed.
-// <fstream> writes CSV output to a file.
+// <fstream> writes CSV output files.
 // <iomanip> formats decimal values, such as 60.0 instead of 60.
 // <iostream> provides terminal output with std::cout and std::cerr.
 #include <array>
@@ -20,16 +25,23 @@
 #include <iostream>
 #include <system_error>
 
-// A Scenario combines a readable name with simulated controller input data.
+// A Scenario combines a readable name with one set of simulated input data.
 struct Scenario {
     const char* name;
     SensorData data;
 };
 
+// A PeriodicStep combines a simulated timestamp with one set of controller
+// input data. Each step represents one controller update in the 100 ms loop.
+struct PeriodicStep {
+    int time_ms;
+    SensorData data;
+};
+
 // Creates standard simulated sensor/CAN input data.
 //
-// Most scenarios use valid input values by default. A specific scenario can
-// override only the value it needs, such as sensor validity or message age.
+// Most inputs use valid defaults. Individual scenarios or periodic steps can
+// override the sensor validity, CAN-message state, or message age as needed.
 static SensorData make_sensor_data(
     double battery_temperature_c,
     bool temperature_sensor_valid = true,
@@ -53,10 +65,34 @@ static const char* bool_to_string(
     return value ? "true" : "false";
 }
 
-// Writes the first row of the CSV file.
+// Writes the common input and output fields used by both CSV files.
 //
-// The header names explain the meaning of every value in later CSV rows.
-static void write_csv_header(
+// The scenario CSV writes a scenario name first.
+// The periodic CSV writes a simulated time value first.
+static void write_csv_input_and_output_fields(
+    std::ofstream& csv_file,
+    const SensorData& data,
+    const ControllerOutput& output
+) {
+    csv_file << std::fixed << std::setprecision(1);
+
+    csv_file
+        << data.battery_temperature_c << ','
+        << data.ambient_temperature_c << ','
+        << data.charge_current_a << ','
+        << bool_to_string(data.temperature_sensor_valid) << ','
+        << bool_to_string(data.can_message_received) << ','
+        << data.message_age_ms << ','
+        << to_string(output.mode) << ','
+        << output.cooling_command_percent << ','
+        << bool_to_string(output.charging_enabled) << ','
+        << bool_to_string(output.charging_derated) << ','
+        << bool_to_string(output.fault_active) << ','
+        << to_string(output.fault_code);
+}
+
+// Writes the first row of the scenario-result CSV file.
+static void write_scenario_csv_header(
     std::ofstream& csv_file
 ) {
     csv_file
@@ -75,45 +111,70 @@ static void write_csv_header(
         << "fault_code\n";
 }
 
-// Writes one completed controller scenario to one CSV row.
-//
-// Scenario names are controlled by this program and do not contain commas,
-// so they can safely be written directly into this simple CSV format.
-static void write_csv_result(
+// Writes one scenario result to the scenario CSV file.
+static void write_scenario_csv_result(
     std::ofstream& csv_file,
     const Scenario& scenario,
     const ControllerOutput& output
 ) {
-    csv_file << std::fixed << std::setprecision(1);
+    // Scenario names are controlled by this program and contain no commas.
+    csv_file << scenario.name << ',';
 
-    csv_file
-        << scenario.name << ','
-        << scenario.data.battery_temperature_c << ','
-        << scenario.data.ambient_temperature_c << ','
-        << scenario.data.charge_current_a << ','
-        << bool_to_string(scenario.data.temperature_sensor_valid) << ','
-        << bool_to_string(scenario.data.can_message_received) << ','
-        << scenario.data.message_age_ms << ','
-        << to_string(output.mode) << ','
-        << output.cooling_command_percent << ','
-        << bool_to_string(output.charging_enabled) << ','
-        << bool_to_string(output.charging_derated) << ','
-        << bool_to_string(output.fault_active) << ','
-        << to_string(output.fault_code)
-        << '\n';
+    write_csv_input_and_output_fields(
+        csv_file,
+        scenario.data,
+        output
+    );
+
+    csv_file << '\n';
 }
 
-// Runs the controller once for one simulated scenario, prints the input and
-// result to the terminal, then returns the output for CSV logging.
+// Writes the first row of the periodic-result CSV file.
+static void write_periodic_csv_header(
+    std::ofstream& csv_file
+) {
+    csv_file
+        << "time_ms,"
+        << "battery_temperature_c,"
+        << "ambient_temperature_c,"
+        << "charge_current_a,"
+        << "temperature_sensor_valid,"
+        << "can_message_received,"
+        << "message_age_ms,"
+        << "mode,"
+        << "cooling_command_percent,"
+        << "charging_enabled,"
+        << "charging_derated,"
+        << "fault_active,"
+        << "fault_code\n";
+}
+
+// Writes one periodic controller update to the periodic CSV file.
+static void write_periodic_csv_result(
+    std::ofstream& csv_file,
+    const PeriodicStep& step,
+    const ControllerOutput& output
+) {
+    csv_file << step.time_ms << ',';
+
+    write_csv_input_and_output_fields(
+        csv_file,
+        step.data,
+        output
+    );
+
+    csv_file << '\n';
+}
+
+// Runs one named scenario, prints the input/output result, and returns the
+// output so the caller can save it to the scenario CSV file.
 static ControllerOutput print_scenario(
     const Scenario& scenario
 ) {
-    // The controller receives SensorData and returns the complete decision:
-    // operating mode, cooling command, charging state, and fault information.
     const ControllerOutput output =
         update_controller(scenario.data);
 
-    // Print the simulated input values used by this scenario.
+    // Print simulated scenario inputs.
     std::cout << "Scenario: " << scenario.name << '\n';
 
     std::cout << "  Battery temperature: "
@@ -140,7 +201,51 @@ static ControllerOutput print_scenario(
               << scenario.data.message_age_ms
               << " ms\n";
 
-    // Print the output decision calculated by the controller.
+    // Print the controller decision calculated from those inputs.
+    std::cout << "  Mode: "
+              << to_string(output.mode)
+              << '\n';
+
+    std::cout << "  Cooling command: "
+              << output.cooling_command_percent
+              << "%\n";
+
+    std::cout << "  Charging enabled: "
+              << output.charging_enabled
+              << '\n';
+
+    std::cout << "  Charging derated: "
+              << output.charging_derated
+              << '\n';
+
+    std::cout << "  Fault active: "
+              << output.fault_active
+              << '\n';
+
+    std::cout << "  Fault code: "
+              << to_string(output.fault_code)
+              << "\n\n";
+
+    return output;
+}
+
+// Runs one simulated periodic controller update and prints a shorter summary.
+//
+// The time value is simulated. No real delay or sleep call is used.
+static ControllerOutput print_periodic_step(
+    const PeriodicStep& step
+) {
+    const ControllerOutput output =
+        update_controller(step.data);
+
+    std::cout << "Time: "
+              << step.time_ms
+              << " ms\n";
+
+    std::cout << "  Battery temperature: "
+              << step.data.battery_temperature_c
+              << " C\n";
+
     std::cout << "  Mode: "
               << to_string(output.mode)
               << '\n';
@@ -169,9 +274,7 @@ static ControllerOutput print_scenario(
 }
 
 int main() {
-    // Define the simulated conditions used to demonstrate normal behavior,
-    // charge derating, sensor faults, communication faults, and temperature
-    // safety faults.
+    // Define independent scenarios for normal, cooling, derate, and faults.
     const std::array<Scenario, 7> scenarios{{
         {
             "Normal operation",
@@ -203,10 +306,42 @@ int main() {
         }
     }};
 
-    // Create the data directory if it does not already exist.
+    // Define a simulated periodic sequence.
     //
-    // The demo runs from cpp/, so ../data points to the repository's data/
-    // directory: ev-thermal-controller/data/.
+    // Each element represents one controller update every 100 ms. The values
+    // are processed immediately rather than waiting in real time.
+    const std::array<PeriodicStep, 7> periodic_steps{{
+        {
+            0,
+            make_sensor_data(25.0)
+        },
+        {
+            100,
+            make_sensor_data(32.0)
+        },
+        {
+            200,
+            make_sensor_data(42.0)
+        },
+        {
+            300,
+            make_sensor_data(55.0)
+        },
+        {
+            400,
+            make_sensor_data(60.0)
+        },
+        {
+            500,
+            make_sensor_data(42.0)
+        },
+        {
+            600,
+            make_sensor_data(25.0)
+        }
+    }};
+
+    // Create the generated-data directory if it does not exist.
     const std::filesystem::path data_directory = "../data";
     std::error_code filesystem_error;
 
@@ -224,63 +359,109 @@ int main() {
         return 1;
     }
 
-    // Open the CSV file for writing. Each demo run replaces the old generated
-    // result file with fresh output from the current controller behavior.
-    const std::filesystem::path csv_path =
+    // Define paths for the two generated CSV files.
+    const std::filesystem::path scenario_csv_path =
         data_directory / "scenario_results.csv";
 
-    std::ofstream csv_file(csv_path);
+    const std::filesystem::path periodic_csv_path =
+        data_directory / "periodic_results.csv";
 
-    if (!csv_file.is_open()) {
+    // Open the scenario CSV file for fresh output.
+    std::ofstream scenario_csv_file(scenario_csv_path);
+
+    if (!scenario_csv_file.is_open()) {
         std::cerr
-            << "Error: could not open CSV output file: "
-            << csv_path
+            << "Error: could not open scenario CSV output file: "
+            << scenario_csv_path
             << '\n';
 
         return 1;
     }
 
-    // Write the CSV column names before writing individual scenario results.
-    write_csv_header(csv_file);
+    // Open the periodic CSV file for fresh output.
+    std::ofstream periodic_csv_file(periodic_csv_path);
+
+    if (!periodic_csv_file.is_open()) {
+        std::cerr
+            << "Error: could not open periodic CSV output file: "
+            << periodic_csv_path
+            << '\n';
+
+        return 1;
+    }
+
+    // Write CSV column headers before writing result rows.
+    write_scenario_csv_header(scenario_csv_file);
+    write_periodic_csv_header(periodic_csv_file);
 
     // Format terminal decimal values with one decimal place and print Boolean
-    // values as true/false rather than 1/0.
+    // values as true/false instead of 1/0.
     std::cout << std::fixed << std::setprecision(1);
     std::cout << std::boolalpha;
 
-    // Print a title so the terminal output is easy to identify.
+    // Print the scenario-runner title.
     std::cout << "EV Battery Thermal Controller Scenario Runner\n";
     std::cout << "================================================\n\n";
 
-    // Run every scenario, print the result to the terminal, and save the same
-    // controller decision into the CSV file.
+    // Run and log every independent scenario.
     for (const Scenario& scenario : scenarios) {
         const ControllerOutput output =
             print_scenario(scenario);
 
-        write_csv_result(
-            csv_file,
+        write_scenario_csv_result(
+            scenario_csv_file,
             scenario,
             output
         );
     }
 
-    // Close the CSV file after all scenario results have been written.
-    csv_file.close();
+    // Run and log the simulated periodic 100 ms sequence.
+    std::cout << "Simulated Periodic Controller Sequence\n";
+    std::cout << "======================================\n";
+    std::cout << "Update interval: 100 ms\n\n";
 
-    // Check whether writing the file succeeded before reporting completion.
-    if (!csv_file) {
+    for (const PeriodicStep& step : periodic_steps) {
+        const ControllerOutput output =
+            print_periodic_step(step);
+
+        write_periodic_csv_result(
+            periodic_csv_file,
+            step,
+            output
+        );
+    }
+
+    // Close both generated CSV files after all results are written.
+    scenario_csv_file.close();
+    periodic_csv_file.close();
+
+    // Check whether the scenario CSV write completed successfully.
+    if (!scenario_csv_file) {
         std::cerr
-            << "Error: failed while writing CSV results.\n";
+            << "Error: failed while writing scenario CSV results.\n";
 
         return 1;
     }
 
+    // Check whether the periodic CSV write completed successfully.
+    if (!periodic_csv_file) {
+        std::cerr
+            << "Error: failed while writing periodic CSV results.\n";
+
+        return 1;
+    }
+
+    // Report generated CSV locations.
     std::cout
-        << "CSV results written to: "
-        << csv_path
+        << "Scenario CSV results written to: "
+        << scenario_csv_path
         << '\n';
 
-    // Return zero to indicate that the demo completed successfully.
+    std::cout
+        << "Periodic CSV results written to: "
+        << periodic_csv_path
+        << '\n';
+
+    // Return zero to indicate successful completion.
     return 0;
 }
